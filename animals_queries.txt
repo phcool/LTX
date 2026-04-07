@@ -1,0 +1,182 @@
+# One query per line. Lines starting with # are ignored.
+animal rescue
+animal shelter
+animal sanctuary
+pet grooming
+veterinarian animal
+dog running
+dog playing
+dog park
+dog beach
+puppy playing
+cat playing
+cat sleeping
+kitten playing
+bird flying
+bird feeding
+bird nest
+parrot talking
+owl forest
+eagle flying
+horse running
+horse riding
+horse farm
+cow grazing
+goat farm
+sheep field
+pig farm
+rabbit eating
+hamster pet
+deer forest
+fox wild
+wolf pack
+bear forest
+lion resting
+tiger walking
+leopard wild
+cheetah running
+elephant walking
+giraffe safari
+zebra herd
+monkey climbing
+gorilla forest
+chimpanzee wild
+panda eating
+koala tree
+kangaroo jumping
+dolphin swimming
+whale ocean
+seal beach
+sea lion coast
+otter river
+fish underwater
+shark swimming
+turtle swimming
+frog pond
+snake crawling
+lizard reptile
+bee pollinating
+butterfly flower
+dragonfly pond
+zoo animals
+farm animals
+wild animals
+underwater animals
+dog swimming
+dog walking
+dog jumping
+dog training
+dog catching frisbee
+dog in snow
+dog in water
+dog with owner
+pet dog indoors
+pet dog outdoors
+cat walking
+cat grooming
+cat stretching
+cat on sofa
+cat on window
+pet cat indoors
+kitten sleeping
+kitten eating
+kitten running
+bird on branch
+bird in tree
+bird drinking water
+bird close up
+birds flock
+bird wings
+parrot pet
+parrot colorful
+owl close up
+eagle nest
+duck swimming
+swan lake
+horse galloping
+horse stable
+horse pasture
+horse close up
+cow farm
+cows field
+calf farm
+goats grazing
+sheep grazing
+piglet farm
+rabbit grass
+rabbit pet
+hamster running
+guinea pig pet
+deer running
+deer grazing
+fox running
+fox forest
+wolf howling
+bear walking
+bear river
+lion pride
+lioness safari
+tiger close up
+tiger in zoo
+leopard resting
+cheetah sprint
+elephant herd
+elephant safari
+giraffe eating
+giraffe close up
+zebra running
+zebra safari
+monkey eating
+monkey forest
+gorilla close up
+chimpanzee eating
+panda zoo
+koala eating
+kangaroo australia
+dolphin jumping
+dolphin ocean
+whale tail
+whale breaching
+seal swimming
+sea lion swimming
+otter swimming
+fish reef
+tropical fish
+school of fish
+shark underwater
+turtle ocean
+sea turtle swimming
+frog close up
+frog jumping
+snake close up
+snake in grass
+lizard close up
+iguana reptile
+chameleon reptile
+bee flower
+bees hive
+butterfly garden
+butterfly close up
+dragonfly close up
+insects macro
+spider web
+ant colony
+crab beach
+jellyfish underwater
+octopus underwater
+starfish ocean
+penguin walking
+penguin swimming
+flamingo lake
+peacock feathers
+camel desert
+donkey farm
+alpaca farm
+llama farm
+reindeer snow
+bison field
+buffalo herd
+crocodile river
+alligator swamp
+hippo river
+rhinoceros safari

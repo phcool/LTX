@@ -1,0 +1,91 @@
+acceleration:
+  load_text_encoder_in_8bit: false
+  mixed_precision_mode: bf16
+  quantization: null
+checkpoints:
+  interval: 100
+  keep_last_n: -1
+  precision: bfloat16
+data:
+  num_dataloader_workers: 2
+  preprocessed_data_root: /nfs/hanpeng/LTX-2/pexels/.precomputed
+flow_matching:
+  timestep_sampling_mode: shifted_logit_normal
+  timestep_sampling_params: {}
+hub:
+  hub_model_id: null
+  push_to_hub: false
+lora:
+  alpha: 32
+  dropout: 0.0
+  rank: 32
+  target_modules:
+  - to_k
+  - to_q
+  - to_v
+  - to_out.0
+model:
+  load_checkpoint: null
+  model_path: /nfs/hanpeng/huggingface/models/LTX-2.3/ltx-2.3-22b-dev.safetensors
+  text_encoder_path: /nfs/hanpeng/huggingface/models/gemma-3-12b-it-qat-q4_0-unquantized
+  training_mode: lora
+optimization:
+  batch_size: 1
+  enable_gradient_checkpointing: true
+  gradient_accumulation_steps: 1
+  learning_rate: 0.0001
+  max_grad_norm: 1.0
+  optimizer_type: adamw
+  scheduler_params: {}
+  scheduler_type: linear
+  steps: 300
+output_dir: /nfs/hanpeng/LTX-2/pexels/outputs
+seed: 42
+training_strategy:
+  audio_latents_dir: audio_latents
+  first_frame_conditioning_p: 0.5
+  name: text_to_video
+  with_audio: false
+validation:
+  frame_rate: 25.0
+  generate_audio: true
+  guidance_scale: 4.0
+  images: null
+  include_reference_in_output: false
+  inference_steps: 30
+  interval: 100
+  negative_prompt: worst quality, inconsistent motion, blurry, jittery, distorted
+  prompts:
+  - A woman with long brown hair sits at a wooden desk in a cozy home office, typing
+    on a laptop while occasionally glancing at notes beside her. Soft natural light
+    streams through a large window, casting warm shadows across the room. She pauses
+    to take a sip from a ceramic mug, then continues working with focused concentration.
+    The audio captures the gentle clicking of keyboard keys, the soft rustle of papers,
+    and ambient room tone with occasional distant bird chirps from outside.
+  - A chef in a white uniform stands in a professional kitchen, carefully plating
+    a gourmet dish with precise movements. Steam rises from freshly cooked vegetables
+    as he arranges them with tweezers. The stainless steel surfaces gleam under bright
+    overhead lights, and various pots simmer on the stove behind him. The audio features
+    the sizzling of pans, the clinking of utensils against plates, and the ambient
+    hum of kitchen ventilation.
+  reference_downscale_factor: 1
+  reference_videos: null
+  seed: 42
+  skip_initial_validation: false
+  stg_blocks:
+  - 29
+  stg_mode: stg_av
+  stg_scale: 1.0
+  video_dims: !!python/tuple
+  - 576
+  - 576
+  - 89
+  videos_per_prompt: 1
+wandb:
+  enabled: false
+  entity: null
+  log_validation_videos: true
+  project: ltx-2-trainer
+  tags:
+  - ltx2
+  - lora

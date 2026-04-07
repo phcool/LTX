@@ -1,0 +1,168 @@
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/transformers/utils/hub.py:110: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/transformers/utils/hub.py:110: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/transformers/utils/hub.py:110: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/transformers/utils/hub.py:110: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/transformers/utils/hub.py:110: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/transformers/utils/hub.py:110: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/transformers/utils/hub.py:110: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/transformers/utils/hub.py:110: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/transformers/utils/hub.py:110: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+
+                            ⚙️  Training Configuration                             
+╭──────────────────────┬─────────────────────────────────────────────────────────╮
+│ 🎬 Model             │                                                         │
+│   Base               │ /nfs/hanpeng/huggingface/models/LTX-2.3/ltx-2.3-22b-... │
+│   Text Encoder       │ /nfs/hanpeng/huggingface/models/gemma-3-12b-it-qat-q... │
+│   Training Mode      │ FULL                                                    │
+│   Load Checkpoint    │ —                                                       │
+│                      │                                                         │
+│ 🎯 Strategy          │                                                         │
+│   Name               │ text_to_video                                           │
+│   Audio              │ ✗                                                       │
+│   First Frame Cond P │ 0.5                                                     │
+│                      │                                                         │
+│ ⚡ Optimization      │                                                         │
+│   Steps              │ 300                                                     │
+│   Learning Rate      │ 1.00e-05                                                │
+│   Batch Size         │ 1                                                       │
+│   Grad Accumulation  │ 1                                                       │
+│   Optimizer          │ adamw                                                   │
+│   Scheduler          │ linear                                                  │
+│   Max Grad Norm      │ 1.0                                                     │
+│   Grad Checkpointing │ ✓                                                       │
+│                      │                                                         │
+│ 🚀 Acceleration      │                                                         │
+│   Mixed Precision    │ bf16                                                    │
+│   Quantization       │ —                                                       │
+│   Text Encoder 8bit  │ ✗                                                       │
+│                      │                                                         │
+│ 🎥 Validation        │                                                         │
+│   Prompts            │ 2 prompt(s)                                             │
+│   Interval           │ Every 100 steps                                         │
+│   Video Dims         │ 576x576, 89 frames                                      │
+│   Frame Rate         │ 25.0 fps                                                │
+│   Inference Steps    │ 30                                                      │
+│   CFG Scale          │ 4.0                                                     │
+│   STG                │ scale=1.0; blocks=29; mode=stg_av                       │
+│   Seed               │ 42                                                      │
+│                      │                                                         │
+│ 📂 Data & Output     │                                                         │
+│   Dataset            │ /nfs/hanpeng/LTX-2/pexels/.precomputed                  │
+│   Dataloader Workers │ 2                                                       │
+│   Output Dir         │ /nfs/hanpeng/LTX-2/pexels/outputs_full                  │
+│   Seed               │ 42                                                      │
+│                      │                                                         │
+│ 🔌 Integrations      │                                                         │
+│   Checkpoints        │ Every 100 steps (keep -1)                               │
+│   W&B                │ Disabled                                                │
+│   HF Hub             │ Disabled                                                │
+╰──────────────────────┴─────────────────────────────────────────────────────────╯
+
+DEBUG    [rank 0] 🎯 Using TextToVideoStrategy training strategy (audio disabled 🔇)          __init__.py:57
+DEBUG    [rank 0] Loading text encoder...                                                     trainer.py:382
+Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
+Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
+Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
+Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
+Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
+Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
+Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
+Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
+DEBUG    [rank 0] Loading embeddings processor...                        trainer.py:391
+INFO     [rank 0] Pre-computing embeddings for 2 validation prompts...   trainer.py:401
+DEBUG    [rank 0] Validation prompt embeddings cached. Gemma model       trainer.py:426
+         unloaded                                                                      
+INFO     [rank 0] Loading LTX-2 model from                          model_loader.py:329
+         /nfs/hanpeng/huggingface/models/LTX-2.3/ltx-2.3-22b-dev.sa                    
+         fetensors                                                                     
+DEBUG    [rank 0] Loading transformer...                            model_loader.py:334
+DEBUG    [rank 0] Loading video VAE decoder...                      model_loader.py:346
+DEBUG    [rank 0] Loading audio VAE decoder...                      model_loader.py:352
+DEBUG    [rank 0] Loading vocoder...                                model_loader.py:358
+INFO     [rank 0] FSDP distributed training enabled with 8 processes     trainer.py:744
+INFO     [rank 0] Local batch size: 1, global batch size: 8              trainer.py:751
+DEBUG    [rank 0] Trainable params count: 18,988,838,144                 trainer.py:503
+DEBUG    [rank 0] GPU memory usage after models preparation: 12.63 GB    trainer.py:593
+DEBUG    [rank 0] Process 0 using seed: 42                               trainer.py:134
+DEBUG    [rank 0] Loaded dataset with 182 samples from sources:          trainer.py:632
+         ['latents', 'conditions']                                                     
+INFO     [rank 0] 💾 Training configuration saved to:                    trainer.py:995
+         training_config.yaml                                                          
+INFO     [rank 0] 🚀 Starting training...                                trainer.py:149
+INFO     [rank 0] 🎥 Validation samples for step 0 saved in samples      trainer.py:884
+INFO     [rank 0] 🎥 Validation samples for step 100 saved in samples    trainer.py:884
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+INFO     [rank 0] 💾 Model weights for step 100 saved in                 trainer.py:953
+         checkpoints/model_weights_step_00100.safetensors                              
+INFO     [rank 0] 🎥 Validation samples for step 200 saved in samples    trainer.py:884
+INFO     [rank 0] 💾 Model weights for step 200 saved in                 trainer.py:953
+         checkpoints/model_weights_step_00200.safetensors                              
+INFO     [rank 0] 🎥 Validation samples for step 300 saved in samples    trainer.py:884
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+INFO     [rank 0] 💾 Model weights for step 300 saved in                 trainer.py:953
+         checkpoints/model_weights_step_00300.safetensors                              
+Training 300/300 ━━━━━━━━ Loss: 0.1855 | LR: 1.00e-06 | 221.24s/step 0:18:14 ETA: 00:00
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+/nfs/hanpeng/LTX-2/.venv/lib/python3.13/site-packages/torch/distributed/fsdp/fully_sharded_data_parallel.py:675: FutureWarning: FSDP.state_dict_type() and FSDP.set_state_dict_type() are being deprecated. Please use APIs, get_state_dict() and set_state_dict(), which can support different parallelisms, FSDP1, FSDP2, DDP. API doc: https://pytorch.org/docs/stable/distributed.checkpoint.html#torch.distributed.checkpoint.state_dict.get_state_dict .Tutorial: https://pytorch.org/tutorials/recipes/distributed_checkpoint_recipe.html .
+  warnings.warn(
+INFO     [rank 0] 💾 Model weights for step 300 saved in                 trainer.py:953
+         checkpoints/model_weights_step_00300.safetensors                              
+INFO     [rank 0] 📊 Training Statistics:                                trainer.py:900
+          - Total time: 18.3 minutes                                                   
+          - Training speed: 0.27 steps/second                                          
+          - Samples/second: 2.19                                                       
+          - Peak GPU memory: 62.44 GB                                                  
+          - Number of processes: 8                                                     
+          - Global batch size: 8                                                       
