@@ -6,10 +6,16 @@ from pathlib import Path
 from typing import Callable
 
 import torch
+import torch.distributed as dist
 import wandb
 import yaml
 from accelerate import Accelerator, DistributedType
 from accelerate.utils import set_seed
+from ltx_core.distributed.ulysses import (
+    configure_ulysses_sequence_parallel,
+    disable_ulysses_sequence_parallel,
+)
+from ltx_core.model.transformer.attention import Attention
 from peft import LoraConfig, get_peft_model, get_peft_model_state_dict, set_peft_model_state_dict
 from peft.tuners.tuners_utils import BaseTunerLayer
 from peft.utils import ModulesToSaveWrapper
@@ -64,6 +70,31 @@ if not IS_MAIN_PROCESS:
 StepCallback = Callable[[int, int, list[Path]], None]  # (step, total, list[sampled_video_path]) -> None
 
 MEMORY_CHECK_INTERVAL = 200
+
+
+def _get_rank_local_device() -> str:
+    """Resolve the CUDA device for the current launched rank before Accelerator is constructed."""
+    if not torch.cuda.is_available():
+        return "cpu"
+
+    local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+    return f"cuda:{local_rank}"
+
+
+def _trace_rank(message: str) -> None:
+    """Emit an unfiltered per-rank trace line for distributed startup debugging."""
+    rank = os.environ.get("RANK", os.environ.get("LOCAL_RANK", "0"))
+    print(f"[trace rank {rank}] {message}", flush=True)
+
+
+def _is_fsdp_launch() -> bool:
+    """Best-effort check for an Accelerate FSDP launch before Accelerator is constructed."""
+    env_candidates = (
+        os.environ.get("ACCELERATE_USE_FSDP"),
+        os.environ.get("ACCELERATE_DISTRIBUTED_TYPE"),
+        os.environ.get("DISTRIBUTED_TYPE"),
+    )
+    return any(value is not None and "FSDP" in value.upper() for value in env_candidates)
 
 
 class TrainingStats(BaseModel):
@@ -378,21 +409,22 @@ class LtxvTrainer:
         #   2. Loads the embeddings processor (feature extractor + connectors)
         #   3. If validation prompts are configured, computes and caches their embeddings
         #   4. Unloads the Gemma model entirely, keeps the embeddings processor for training
+        device = _get_rank_local_device()
 
         # Load text encoder (pure Gemma LLM) on GPU
-        logger.debug("Loading text encoder...")
+        logger.debug(f"Loading text encoder on {device}...")
         text_encoder = load_text_encoder(
             gemma_model_path=self._config.model.text_encoder_path,
-            device="cuda",
+            device=device,
             dtype=torch.bfloat16,
             load_in_8bit=self._config.acceleration.load_text_encoder_in_8bit,
         )
 
         # Load embeddings processor (feature extractor + connectors)
-        logger.debug("Loading embeddings processor...")
+        logger.debug(f"Loading embeddings processor on {device}...")
         self._embeddings_processor = load_embeddings_processor(
             checkpoint_path=self._config.model.model_path,
-            device="cuda",
+            device=device,
             dtype=torch.bfloat16,
         )
 
@@ -463,9 +495,12 @@ class LtxvTrainer:
         # Note: self._embeddings_processor was set in _load_text_encoder_and_cache_embeddings
 
         # Determine initial dtype based on training mode.
-        # Note: For FSDP + LoRA, we'll cast to FP32 later in _prepare_models_for_training()
-        # after the accelerator is set up, and we can detect FSDP.
-        transformer_dtype = torch.bfloat16 if self._config.model.training_mode == "lora" else torch.float32
+        # For FSDP + LoRA we load the transformer directly in FP32 so startup
+        # does not need a second full-model BF16->FP32 conversion on every rank.
+        use_fp32_transformer = self._config.model.training_mode == "full" or (
+            self._config.model.training_mode == "lora" and _is_fsdp_launch()
+        )
+        transformer_dtype = torch.float32 if use_fp32_transformer else torch.bfloat16
         self._transformer = self._transformer.to(dtype=transformer_dtype)
 
         if self._config.acceleration.quantization is not None:
@@ -659,6 +694,7 @@ class LtxvTrainer:
 
     def _prepare_models_for_training(self) -> None:
         """Prepare models for training with Accelerate."""
+        _trace_rank("enter _prepare_models_for_training")
 
         # For FSDP + LoRA: Cast entire model to FP32.
         # FSDP requires uniform dtype across all parameters in wrapped modules.
@@ -666,6 +702,7 @@ class LtxvTrainer:
         # We cast the base model to FP32 to match the LoRA params.
         if self._accelerator.distributed_type == DistributedType.FSDP and self._config.model.training_mode == "lora":
             logger.debug("FSDP: casting transformer to FP32 for uniform dtype")
+            _trace_rank("casting transformer to FP32 before accelerator.prepare")
             self._transformer = self._transformer.to(dtype=torch.float32)
 
         # Enable gradient checkpointing if requested
@@ -674,6 +711,7 @@ class LtxvTrainer:
             self._transformer.get_base_model() if hasattr(self._transformer, "get_base_model") else self._transformer
         )
 
+        _trace_rank("configuring gradient checkpointing")
         transformer.set_gradient_checkpointing(self._config.optimization.enable_gradient_checkpointing)
 
         # Keep frozen models on CPU for memory efficiency
@@ -683,8 +721,10 @@ class LtxvTrainer:
 
         # Embedding connectors are already on GPU from _load_text_encoder_and_cache_embeddings
 
+        _trace_rank("calling accelerator.prepare on transformer")
         # noinspection PyTypeChecker
         self._transformer = self._accelerator.prepare(self._transformer)
+        _trace_rank("returned from accelerator.prepare on transformer")
 
         # Log GPU memory usage after model preparation
         vram_usage_gb = torch.cuda.memory_allocated() / 1024**3
@@ -722,6 +762,7 @@ class LtxvTrainer:
 
     def _init_dataloader(self) -> None:
         """Initialize the training data loader using the strategy's data sources."""
+        _trace_rank("enter _init_dataloader")
         if self._dataset is None:
             # Get data sources from the training strategy
             data_sources = self._training_strategy.get_data_sources()
@@ -740,7 +781,9 @@ class LtxvTrainer:
             persistent_workers=num_workers > 0,
         )
 
+        _trace_rank("calling accelerator.prepare on dataloader")
         self._dataloader = self._accelerator.prepare(dataloader)
+        _trace_rank("returned from accelerator.prepare on dataloader")
 
     def _init_lora_weights(self) -> None:
         """Initialize LoRA weights for the transformer."""
@@ -751,6 +794,7 @@ class LtxvTrainer:
 
     def _init_optimizer(self) -> None:
         """Initialize the optimizer and learning rate scheduler."""
+        _trace_rank("enter _init_optimizer")
         opt_cfg = self._config.optimization
 
         lr = opt_cfg.learning_rate
@@ -767,7 +811,9 @@ class LtxvTrainer:
         lr_scheduler = self._create_scheduler(optimizer)
 
         # noinspection PyTypeChecker
+        _trace_rank("calling accelerator.prepare on optimizer and scheduler")
         self._optimizer, self._lr_scheduler = self._accelerator.prepare(optimizer, lr_scheduler)
+        _trace_rank("returned from accelerator.prepare on optimizer and scheduler")
 
     def _create_scheduler(self, optimizer: torch.optim.Optimizer) -> LRScheduler | None:
         """Create learning rate scheduler based on config."""
@@ -861,6 +907,69 @@ class LtxvTrainer:
                 f"FSDP with quantization ({self._config.acceleration.quantization}) may have compatibility issues."
                 "Monitor training stability and consider disabling quantization if issues arise."
             )
+
+        self._setup_ulysses_sequence_parallel()
+
+    def _setup_ulysses_sequence_parallel(self) -> None:
+        """Initialize optional Ulysses sequence parallel groups for attention."""
+        disable_ulysses_sequence_parallel()
+
+        ulysses_cfg = self._config.acceleration.ulysses
+        if not ulysses_cfg.enabled:
+            return
+
+        if ulysses_cfg.sequence_parallel_size <= 1:
+            logger.warning("Ulysses is enabled but sequence_parallel_size <= 1. Disabling Ulysses.")
+            return
+
+        if self._accelerator.num_processes <= 1:
+            logger.warning("Ulysses sequence parallel requires multiple processes. Disabling Ulysses.")
+            return
+
+        if not dist.is_available() or not dist.is_initialized():
+            logger.warning("torch.distributed is not initialized, so Ulysses sequence parallel will stay disabled.")
+            return
+
+        sequence_parallel_size = ulysses_cfg.sequence_parallel_size
+        world_size = self._accelerator.num_processes
+        if world_size % sequence_parallel_size != 0:
+            raise ValueError(
+                f"acceleration.ulysses.sequence_parallel_size ({sequence_parallel_size}) must divide the number "
+                f"of processes ({world_size})."
+            )
+
+        attention_heads = {module.heads for module in self._transformer.modules() if isinstance(module, Attention)}
+        invalid_heads = sorted(heads for heads in attention_heads if heads % sequence_parallel_size != 0)
+        if invalid_heads:
+            raise ValueError(
+                "Ulysses sequence_parallel_size must divide every attention head count in the transformer. "
+                f"Invalid head counts: {invalid_heads}"
+            )
+
+        local_group = None
+        rank_in_group = 0
+        process_index = self._accelerator.process_index
+        for group_start in range(0, world_size, sequence_parallel_size):
+            ranks = list(range(group_start, group_start + sequence_parallel_size))
+            group = dist.new_group(ranks=ranks)
+            if process_index in ranks:
+                local_group = group
+                rank_in_group = process_index - group_start
+
+        if local_group is None:
+            raise RuntimeError("Failed to create a local Ulysses process group for the current rank.")
+
+        configure_ulysses_sequence_parallel(
+            local_group,
+            sequence_parallel_size=sequence_parallel_size,
+            rank_in_group=rank_in_group,
+        )
+
+        logger.info(
+            "Ulysses sequence parallel enabled: "
+            f"group_size={sequence_parallel_size}, rank_in_group={rank_in_group}, "
+            f"num_groups={world_size // sequence_parallel_size}"
+        )
 
     # Note: Use @torch.no_grad() instead of @torch.inference_mode() to avoid FSDP inplace update errors after validation
     @torch.no_grad()

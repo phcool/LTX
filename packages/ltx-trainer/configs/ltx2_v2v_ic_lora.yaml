@@ -166,6 +166,12 @@ acceleration:
   # Useful when GPU memory is limited
   load_text_encoder_in_8bit: false
 
+  # Ulysses sequence parallel for attention layers
+  # Works alongside DDP/FSDP, but sequence_parallel_size must divide the total process count
+  ulysses:
+    enabled: false
+    sequence_parallel_size: 1
+
 # -----------------------------------------------------------------------------
 # Data Configuration
 # -----------------------------------------------------------------------------

@@ -218,6 +218,9 @@ acceleration:
   mixed_precision_mode: "bf16"      # "no", "fp16", or "bf16"
   quantization: null                # Quantization options
   load_text_encoder_in_8bit: false  # Load text encoder in 8-bit
+  ulysses:
+    enabled: false                  # Enable Ulysses sequence parallel attention
+    sequence_parallel_size: 1       # Ranks per sequence-parallel group
 ```
 
 **Key parameters:**
@@ -227,6 +230,12 @@ acceleration:
 | `mixed_precision_mode`      | Precision mode - `"bf16"` recommended for modern GPUs                              |
 | `quantization`              | Model quantization: `null`, `"int8-quanto"`, `"int4-quanto"`, `"fp8-quanto"`, etc. |
 | `load_text_encoder_in_8bit` | Load the Gemma text encoder in 8-bit to save GPU memory                            |
+| `ulysses.enabled`           | Enable Ulysses sequence parallelism inside supported attention layers               |
+| `ulysses.sequence_parallel_size` | Number of ranks per Ulysses group; must divide total launched processes      |
+
+`ulysses` is orthogonal to DDP/FSDP: Accelerate still manages the main distributed strategy, while Ulysses adds an
+extra attention-only process group inside the same run. In the current implementation, Ulysses is applied to
+self-attention and audio-video cross-attention, while text cross-attention stays unchanged.
 
 ### DataConfig
 

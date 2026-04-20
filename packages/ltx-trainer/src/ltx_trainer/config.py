@@ -150,6 +150,21 @@ class OptimizationConfig(ConfigBaseModel):
     )
 
 
+class UlyssesConfig(ConfigBaseModel):
+    """Configuration for Ulysses-style sequence parallel attention."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable Ulysses sequence parallelism for attention layers.",
+    )
+
+    sequence_parallel_size: int = Field(
+        default=1,
+        description="Number of ranks in each Ulysses sequence parallel group.",
+        ge=1,
+    )
+
+
 class AccelerationConfig(ConfigBaseModel):
     """Configuration for hardware acceleration and compute optimization"""
 
@@ -166,6 +181,11 @@ class AccelerationConfig(ConfigBaseModel):
     load_text_encoder_in_8bit: bool = Field(
         default=False,
         description="Whether to load the text encoder in 8-bit precision to save memory",
+    )
+
+    ulysses: UlyssesConfig = Field(
+        default_factory=UlyssesConfig,
+        description="Optional Ulysses sequence parallel configuration for attention layers.",
     )
 
 

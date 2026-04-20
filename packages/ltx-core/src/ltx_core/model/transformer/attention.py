@@ -3,6 +3,7 @@ from typing import Protocol
 
 import torch
 
+from ltx_core.distributed.ulysses import ulysses_attention
 from ltx_core.model.transformer.rope import LTXRopeType, apply_rotary_emb
 
 memory_efficient_attention = None
@@ -211,6 +212,8 @@ class Attention(torch.nn.Module):
         Returns:
             Output tensor of shape ``(B, T, query_dim)``.
         """
+        is_self_attention = context is None
+        is_cross_modal_attention = k_pe is not None
         context = x if context is None else context
         use_attention = not all_perturbed
 
@@ -229,7 +232,17 @@ class Attention(torch.nn.Module):
                 q = apply_rotary_emb(q, pe, self.rope_type)
                 k = apply_rotary_emb(k, pe if k_pe is None else k_pe, self.rope_type)
 
-            out = self.attention_function(q, k, v, self.heads, mask)  # (B, T, H*D)
+            if is_self_attention or is_cross_modal_attention:
+                out = ulysses_attention(
+                    q,
+                    k,
+                    v,
+                    heads=self.heads,
+                    mask=mask,
+                    attention_callable=self.attention_function,
+                )
+            else:
+                out = self.attention_function(q, k, v, self.heads, mask)  # (B, T, H*D)
 
             if perturbation_mask is not None:
                 out = out * perturbation_mask + v * (1 - perturbation_mask)
