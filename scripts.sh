@@ -57,3 +57,17 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 uv run accelerate launch \
   --config_file packages/ltx-trainer/configs/accelerate/ddp.yaml \
   packages/ltx-trainer/scripts/train.py \
   pexels/train_config.yaml
+
+
+.venv/bin/accelerate launch \
+  --config_file pexels_500/fsdp_8gpu.yaml \
+  packages/ltx-trainer/scripts/train_dmd2.py \
+  packages/ltx-trainer/configs/ltx2_dmd2_t2v.yaml
+
+python -m ltx_pipelines.distilled \
+  --distilled-checkpoint-path /nfs/hanpeng/huggingface/models/LTX-2.3/ltx-2.3-22b-dev.safetensors \
+  --spatial-upsampler-path /nfs/hanpeng/huggingface/models/LTX-2.3/ltx-2.3-spatial-upscaler-x2-1.0.safetensors \
+  --gemma-root /nfs/hanpeng/huggingface/models/gemma-3-12b-it-qat-q4_0-unquantized \
+  --lora /nfs/hanpeng/LTX-2/student_step_09300.safetensors 5 \
+  --prompt "a close-up of a cat walking on a concrete surface. The cat has a mix of gray, black, and orange fur with distinct stripes. Its eyes are large and round, with a greenish-yellow color. The cat's nose is pink, and it has white whiskers. The background is slightly blurred, but it appears to be an outdoor setting with some gravel and patches of grass. The cat is moving forward, and its tail is raised slightly. The lighting is natural, suggesting it might be daytime." \
+  --output-path output/cat-dmd2-lora11.mp4

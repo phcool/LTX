@@ -5,6 +5,9 @@ ltx-pipelines = { workspace = true }
 [tool.uv.workspace]
 members = ["packages/*"]
 
+[tool.uv.extra-build-dependencies]
+flash-attn = ["torch"]
+
 [[tool.uv.index]]
 name = "pypi"
 url = "https://pypi.org/simple"

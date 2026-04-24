@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 import time
 import warnings
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ from accelerate.utils import set_seed
 from peft import LoraConfig, get_peft_model, get_peft_model_state_dict
 from safetensors.torch import save_file
 from torch.distributed.fsdp import CPUOffload
+from torch.nn.parallel import DistributedDataParallel
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 
@@ -29,6 +31,7 @@ from ltx_trainer import logger
 from ltx_trainer.datasets import PrecomputedDataset
 from ltx_trainer.discriminators import VideoLatentDiscriminator
 from ltx_trainer.distillation_constants import DISTILLED_PIPELINE_STAGE1_SIGMAS
+from ltx_trainer.distillation_teacher import rectified_teacher_mean_velocity_batch
 from ltx_trainer.dmd2_config import Dmd2TrainerConfig
 from ltx_trainer.gpu_utils import free_gpu_memory_context, get_gpu_memory_gb
 from ltx_trainer.model_loader import (
@@ -175,7 +178,7 @@ class DMD2Trainer:
         )
 
         use_fp32_trainers = self._config.model.training_mode == "full" or (
-            self._config.model.training_mode == "lora" and _is_fsdp_launch()
+            self._config.model.training_mode == "lora" and _is_fsdp_launch() and not self._uses_qlora
         )
         train_model_dtype = torch.float32 if use_fp32_trainers else torch.bfloat16
         self._student = components.transformer.to(dtype=train_model_dtype)
@@ -202,15 +205,19 @@ class DMD2Trainer:
 
         if self._config.acceleration.quantization is not None:
             logger.info(
-                f'Quantizing student and fake models with "{self._config.acceleration.quantization}". This may take a while...'
+                f'Quantizing DMD2 student and fake base models with "{self._config.acceleration.quantization}" '
+                "for QLoRA training. This may take a while..."
             )
+            quantization_device = _get_rank_local_device()
             self._student = quantize_model(
                 self._student,
                 precision=self._config.acceleration.quantization,
+                device=quantization_device,
             )
             self._fake = quantize_model(
                 self._fake,
                 precision=self._config.acceleration.quantization,
+                device=quantization_device,
             )
 
         self._vae_decoder = components.video_vae_decoder.to(dtype=torch.bfloat16)
@@ -250,6 +257,10 @@ class DMD2Trainer:
             use_text_conditioning=self._config.dmd2.discriminator_text_conditioning,
         )
 
+    @property
+    def _uses_qlora(self) -> bool:
+        return self._config.model.training_mode == "lora" and self._config.acceleration.quantization is not None
+
     def _setup_lora_for_model(self, model: torch.nn.Module) -> torch.nn.Module:
         lora_cfg = self._config.lora
         if lora_cfg is None:
@@ -265,7 +276,7 @@ class DMD2Trainer:
         # noinspection PyTypeChecker
         model = get_peft_model(model, lora_config, autocast_adapter_dtype=False)
 
-        target_dtype = next(
+        target_dtype = torch.bfloat16 if self._uses_qlora else next(
             (param.dtype for param in model.parameters() if torch.is_floating_point(param) and not param.requires_grad),
             None,
         )
@@ -379,15 +390,34 @@ class DMD2Trainer:
             logger.info("Moving VAE encoder to CPU")
             self._vae_encoder = self._vae_encoder.to("cpu")
 
-        logger.info("Preparing student with accelerator/FSDP")
-        self._student = self._accelerator.prepare(self._student)
-        logger.info("Student prepared")
+        teacher_prepared = False
+        if self._config.optimization.teacher_deepspeed_inference:
+            logger.info("Preparing teacher with DeepSpeed inference before moving QLoRA trainers to GPU")
+            self._teacher = self._prepare_teacher_with_deepspeed_inference(self._teacher)
+            logger.info("Teacher prepared with DeepSpeed inference")
+            self._teacher.eval()
+            teacher_prepared = True
 
-        logger.info("Preparing fake with accelerator/FSDP")
-        self._fake = self._accelerator.prepare(self._fake)
-        logger.info("Fake prepared")
+        if self._uses_qlora:
+            logger.info("Preparing QLoRA student without FSDP flattening")
+            self._student = self._prepare_qlora_model(self._student)
+            logger.info("QLoRA student prepared")
 
-        if self._config.optimization.teacher_cpu_offload:
+            logger.info("Preparing QLoRA fake without FSDP flattening")
+            self._fake = self._prepare_qlora_model(self._fake)
+            logger.info("QLoRA fake prepared")
+        else:
+            logger.info("Preparing student with accelerator/FSDP")
+            self._student = self._accelerator.prepare(self._student)
+            logger.info("Student prepared")
+
+            logger.info("Preparing fake with accelerator/FSDP")
+            self._fake = self._accelerator.prepare(self._fake)
+            logger.info("Fake prepared")
+
+        if teacher_prepared:
+            pass
+        elif self._config.optimization.teacher_cpu_offload:
             logger.info("Keeping teacher on CPU for DMD2-only teacher offload")
             self._teacher = self._teacher.to("cpu")
             self._teacher.eval()
@@ -396,14 +426,43 @@ class DMD2Trainer:
             self._teacher = self._prepare_teacher_with_fsdp_cpu_offload(self._teacher)
             logger.info("Teacher prepared with FSDP CPU offload")
             self._teacher.eval()
+        elif self._config.optimization.teacher_deepspeed_inference:
+            logger.info("Preparing teacher with DeepSpeed inference")
+            self._teacher = self._prepare_teacher_with_deepspeed_inference(self._teacher)
+            logger.info("Teacher prepared with DeepSpeed inference")
+            self._teacher.eval()
         else:
             logger.info("Preparing teacher with accelerator/FSDP")
             self._teacher = self._accelerator.prepare(self._teacher)
             logger.info("Teacher prepared")
             self._teacher.eval()
 
-        logger.info("Moving discriminator to accelerator device without FSDP wrapping")
-        self._discriminator = self._discriminator.to(self._accelerator.device)
+        logger.info("Preparing discriminator with DDP when distributed")
+        self._discriminator = self._prepare_ddp_model(self._discriminator)
+
+    def _prepare_qlora_model(self, model: torch.nn.Module) -> torch.nn.Module:
+        return self._prepare_ddp_model(model)
+
+    def _prepare_ddp_model(self, model: torch.nn.Module) -> torch.nn.Module:
+        model = model.to(self._accelerator.device)
+        if self._accelerator.num_processes <= 1:
+            return model
+        if not dist.is_available() or not dist.is_initialized():
+            return model
+
+        local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+        return DistributedDataParallel(
+            model,
+            device_ids=[local_rank],
+            output_device=local_rank,
+            broadcast_buffers=False,
+            find_unused_parameters=True,
+        )
+
+    def _unwrap_model(self, model: torch.nn.Module) -> torch.nn.Module:
+        if isinstance(model, DistributedDataParallel):
+            return model.module
+        return self._accelerator.unwrap_model(model)
 
     def _prepare_teacher_with_fsdp_cpu_offload(self, teacher: torch.nn.Module) -> torch.nn.Module:
         if self._accelerator.distributed_type != DistributedType.FSDP:
@@ -419,6 +478,54 @@ class DMD2Trainer:
             return self._accelerator.prepare(teacher)
         finally:
             fsdp_plugin.cpu_offload = original_cpu_offload
+
+    def _prepare_teacher_with_deepspeed_inference(self, teacher: torch.nn.Module) -> torch.nn.Module:
+        ds_tmp_dir = Path(self._config.output_dir) / "deepspeed_tmp"
+        ds_tmp_dir.mkdir(parents=True, exist_ok=True)
+        os.environ.setdefault("TMPDIR", str(ds_tmp_dir))
+        os.environ.setdefault("TORCH_EXTENSIONS_DIR", str(ds_tmp_dir / "torch_extensions"))
+        tempfile.tempdir = str(ds_tmp_dir)
+
+        try:
+            import deepspeed  # noqa: PLC0415
+        except ImportError as exc:
+            raise ImportError(
+                "optimization.teacher_deepspeed_inference=True requires DeepSpeed. "
+                "Install it in this environment before launching DMD2 training."
+            ) from exc
+
+        if self._accelerator.num_processes > 1 and (not dist.is_available() or not dist.is_initialized()):
+            raise RuntimeError("DeepSpeed teacher inference requires torch.distributed to be initialized")
+
+        teacher = teacher.to(device="cpu", dtype=torch.bfloat16)
+        teacher.requires_grad_(False)
+        teacher.eval()
+
+        ds_config = {
+            "train_batch_size": self._config.optimization.batch_size * max(1, self._accelerator.num_processes),
+            "train_micro_batch_size_per_gpu": self._config.optimization.batch_size,
+            "bf16": {"enabled": True},
+            "zero_optimization": {
+                "stage": 3,
+                "offload_param": {
+                    "device": "cpu",
+                    "pin_memory": True,
+                },
+                "stage3_param_persistence_threshold": 0,
+                "stage3_prefetch_bucket_size": 5e8,
+                "stage3_max_live_parameters": 1e9,
+                "stage3_max_reuse_distance": 1e9,
+            },
+        }
+        engine, *_ = deepspeed.initialize(
+            model=teacher,
+            model_parameters=None,
+            config=ds_config,
+            dist_init_required=False,
+        )
+        engine.module.requires_grad_(False)
+        engine.eval()
+        return engine
 
     def _log_model_device_summary(self, name: str, model: torch.nn.Module) -> None:
         if not IS_MAIN_PROCESS:
@@ -458,8 +565,13 @@ class DMD2Trainer:
 
             return teacher_velocity
 
-        teacher_param = next(self._teacher.parameters())
-        teacher_device = self._accelerator.device if self._config.optimization.teacher_fsdp_cpu_offload else teacher_param.device
+        teacher_param = self._first_parameter(self._teacher)
+        teacher_device = (
+            self._accelerator.device
+            if self._config.optimization.teacher_fsdp_cpu_offload
+            or self._config.optimization.teacher_deepspeed_inference
+            else teacher_param.device
+        )
         teacher_dtype = teacher_param.dtype
 
         teacher_modality = Modality(
@@ -478,6 +590,15 @@ class DMD2Trainer:
         with torch.no_grad():
             teacher_velocity, _ = self._teacher(video=teacher_modality, audio=None, perturbations=None)
         return teacher_velocity
+
+    def _first_parameter(self, model: torch.nn.Module) -> torch.nn.Parameter:
+        try:
+            return next(model.parameters())
+        except StopIteration:
+            module = getattr(model, "module", None)
+            if module is not None:
+                return next(module.parameters())
+            raise
 
     def _init_optimizers(self) -> None:
         logger.info("Initializing optimizers")
@@ -647,10 +768,19 @@ class DMD2Trainer:
 
     def _sample_training_sigma(self, batch_size: int, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
         sigma_candidates = torch.tensor(
-            [sigma for sigma in DISTILLED_PIPELINE_STAGE1_SIGMAS if sigma > 0.0],
+            [
+                sigma
+                for sigma in DISTILLED_PIPELINE_STAGE1_SIGMAS
+                if 0.0 < sigma <= self._config.dmd2.fake_diffusion_sigma_max
+            ],
             device=device,
             dtype=dtype,
         )
+        if len(sigma_candidates) == 0:
+            raise ValueError(
+                "dmd2.fake_diffusion_sigma_max excludes every nonzero distilled sigma; "
+                f"got {self._config.dmd2.fake_diffusion_sigma_max}"
+            )
         sigma_indices = torch.randint(0, len(sigma_candidates), (batch_size,), device=device)
         return sigma_candidates[sigma_indices]
 
@@ -696,34 +826,18 @@ class DMD2Trainer:
         perm = torch.randperm(num_intervals, device=device)
         return perm[:count]
 
-    def _compute_generator_loss(self, batch: Dmd2Batch, rollout_final: torch.Tensor) -> tuple[torch.Tensor, dict[str, float]]:
-        noised_sample = self._noise_generated_video(rollout_final, batch.conditioning_mask)
-
-        teacher_modality = self._build_video_modality(
-            latent=noised_sample.noisy_video.detach(),
-            sigma=noised_sample.sigma.detach(),
-            conditioning_mask=batch.conditioning_mask,
-            positions=batch.positions,
-            context=batch.video_prompt_embeds,
-            context_mask=batch.prompt_attention_mask,
-        )
-        teacher_velocity = self._run_teacher_inference(teacher_modality)
-
-        with torch.no_grad():
-            fake_modality = self._build_video_modality(
-                latent=noised_sample.noisy_video.detach(),
-                sigma=noised_sample.sigma.detach(),
-                conditioning_mask=batch.conditioning_mask,
-                positions=batch.positions,
-                context=batch.video_prompt_embeds,
-                context_mask=batch.prompt_attention_mask,
-            )
-            fake_velocity, _ = self._fake(video=fake_modality, audio=None, perturbations=None)
-
-        dm_target = rollout_final.detach() - self._config.dmd2.distribution_matching_step_size * (
-            teacher_velocity.detach() - fake_velocity.detach()
-        )
-        dm_loss = self._masked_mse(rollout_final, dm_target, batch.loss_mask)
+    def _compute_generator_loss(
+        self,
+        batch: Dmd2Batch,
+        rollout_final: torch.Tensor,
+        rollout_steps: list[RolloutStep],
+    ) -> tuple[torch.Tensor, dict[str, float]]:
+        dm_losses = []
+        sampled_indices = self._sample_dm_indices(len(rollout_steps), rollout_final.device)
+        for index in sampled_indices.tolist():
+            step = rollout_steps[index]
+            dm_losses.append(self._compute_interval_dm_loss(batch, step))
+        dm_loss = torch.stack(dm_losses).mean()
 
         gen_adv_logits = self._discriminator(
             rollout_final,
@@ -746,9 +860,136 @@ class DMD2Trainer:
             "loss/generator_total": float(total.detach().item()),
             "loss/dm": float(dm_loss.detach().item()),
             "loss/gan_g": float(gan_loss.detach().item()),
-            "dm/sampled_sigma": float(noised_sample.sigma.detach().float().mean().item()),
+            "dm/intervals": float(len(sampled_indices)),
         }
         return total, metrics
+
+    def _compute_interval_dm_loss(self, batch: Dmd2Batch, step: RolloutStep) -> torch.Tensor:
+        generated_video = step.x0_pred
+        generated_noise = self._noise_from_denoised_prediction(step.latent, generated_video, step.sigma_hi)
+
+        teacher_velocity = self._run_teacher_mean_velocity(
+            clean_video=generated_video.detach(),
+            noise_video=generated_noise.detach(),
+            conditioning_mask=batch.conditioning_mask,
+            positions=batch.positions,
+            context=batch.video_prompt_embeds,
+            context_mask=batch.prompt_attention_mask,
+            sigma_hi=step.sigma_hi.detach(),
+            sigma_lo=step.sigma_lo.detach(),
+        )
+
+        with torch.no_grad():
+            fake_velocity = self._run_fake_mean_velocity(
+                clean_video=generated_video.detach(),
+                noise_video=generated_noise.detach(),
+                conditioning_mask=batch.conditioning_mask,
+                positions=batch.positions,
+                context=batch.video_prompt_embeds,
+                context_mask=batch.prompt_attention_mask,
+                sigma_hi=step.sigma_hi.detach(),
+                sigma_lo=step.sigma_lo.detach(),
+            )
+
+        dm_target = generated_video.detach() - self._config.dmd2.distribution_matching_step_size * (
+            teacher_velocity.detach() - fake_velocity.detach()
+        )
+        return self._masked_mse(generated_video, dm_target, batch.loss_mask)
+
+    def _noise_from_denoised_prediction(
+        self,
+        latent: torch.Tensor,
+        denoised: torch.Tensor,
+        sigma: torch.Tensor,
+    ) -> torch.Tensor:
+        sigma_expanded = sigma.view(-1, 1, 1).clamp_min(1e-6)
+        return (latent - (1.0 - sigma_expanded) * denoised) / sigma_expanded
+
+    def _run_teacher_mean_velocity(
+        self,
+        *,
+        clean_video: torch.Tensor,
+        noise_video: torch.Tensor,
+        conditioning_mask: torch.Tensor,
+        positions: torch.Tensor,
+        context: torch.Tensor,
+        context_mask: torch.Tensor | None,
+        sigma_hi: torch.Tensor,
+        sigma_lo: torch.Tensor,
+    ) -> torch.Tensor:
+        if self._config.optimization.teacher_cpu_offload:
+            teacher_device = self._accelerator.device
+            teacher_dtype = next(self._teacher.parameters()).dtype
+            self._teacher = self._teacher.to(teacher_device)
+            try:
+                with torch.no_grad():
+                    return rectified_teacher_mean_velocity_batch(
+                        self._teacher,
+                        device=teacher_device,
+                        clean_video=clean_video.to(device=teacher_device, dtype=teacher_dtype),
+                        noise_video=noise_video.to(device=teacher_device, dtype=teacher_dtype),
+                        conditioning_mask=conditioning_mask.to(device=teacher_device),
+                        positions=positions.to(device=teacher_device, dtype=teacher_dtype),
+                        context=context.to(device=teacher_device, dtype=teacher_dtype),
+                        context_mask=context_mask.to(device=teacher_device) if context_mask is not None else None,
+                        sigma_hi=sigma_hi.to(device=teacher_device, dtype=teacher_dtype),
+                        sigma_lo=sigma_lo.to(device=teacher_device, dtype=teacher_dtype),
+                        teacher_forward_chunk_size=self._config.optimization.teacher_forward_chunk_size,
+                    )
+            finally:
+                self._teacher = self._teacher.to("cpu")
+
+        teacher_param = self._first_parameter(self._teacher)
+        teacher_device = (
+            self._accelerator.device
+            if self._config.optimization.teacher_fsdp_cpu_offload
+            or self._config.optimization.teacher_deepspeed_inference
+            else teacher_param.device
+        )
+        teacher_dtype = teacher_param.dtype
+        with torch.no_grad():
+            return rectified_teacher_mean_velocity_batch(
+                self._teacher,
+                device=teacher_device,
+                clean_video=clean_video.to(device=teacher_device, dtype=teacher_dtype),
+                noise_video=noise_video.to(device=teacher_device, dtype=teacher_dtype),
+                conditioning_mask=conditioning_mask.to(device=teacher_device),
+                positions=positions.to(device=teacher_device, dtype=teacher_dtype),
+                context=context.to(device=teacher_device, dtype=teacher_dtype),
+                context_mask=context_mask.to(device=teacher_device) if context_mask is not None else None,
+                sigma_hi=sigma_hi.to(device=teacher_device, dtype=teacher_dtype),
+                sigma_lo=sigma_lo.to(device=teacher_device, dtype=teacher_dtype),
+                teacher_forward_chunk_size=self._config.optimization.teacher_forward_chunk_size,
+            )
+
+    def _run_fake_mean_velocity(
+        self,
+        *,
+        clean_video: torch.Tensor,
+        noise_video: torch.Tensor,
+        conditioning_mask: torch.Tensor,
+        positions: torch.Tensor,
+        context: torch.Tensor,
+        context_mask: torch.Tensor | None,
+        sigma_hi: torch.Tensor,
+        sigma_lo: torch.Tensor,
+    ) -> torch.Tensor:
+        fake_param = self._first_parameter(self._fake)
+        fake_device = fake_param.device
+        fake_dtype = fake_param.dtype
+        return rectified_teacher_mean_velocity_batch(
+            self._fake,
+            device=fake_device,
+            clean_video=clean_video.to(device=fake_device, dtype=fake_dtype),
+            noise_video=noise_video.to(device=fake_device, dtype=fake_dtype),
+            conditioning_mask=conditioning_mask.to(device=fake_device),
+            positions=positions.to(device=fake_device, dtype=fake_dtype),
+            context=context.to(device=fake_device, dtype=fake_dtype),
+            context_mask=context_mask.to(device=fake_device) if context_mask is not None else None,
+            sigma_hi=sigma_hi.to(device=fake_device, dtype=fake_dtype),
+            sigma_lo=sigma_lo.to(device=fake_device, dtype=fake_dtype),
+            teacher_forward_chunk_size=self._config.optimization.teacher_forward_chunk_size,
+        )
 
     def _compute_fake_loss(self, batch: Dmd2Batch, generated_video: torch.Tensor) -> tuple[torch.Tensor, dict[str, float]]:
         noised_sample = self._noise_generated_video(generated_video, batch.conditioning_mask)
@@ -794,11 +1035,13 @@ class DMD2Trainer:
         }
 
     def _run_validation(self) -> list[Path]:
+        if not IS_MAIN_PROCESS:
+            return []
         if not self._config.validation.prompts:
             return []
 
         sampler = ValidationSampler(
-            transformer=self._student,
+            transformer=self._unwrap_model(self._student),
             vae_decoder=self._vae_decoder,
             vae_encoder=self._vae_encoder,
             text_encoder=None,
@@ -819,11 +1062,12 @@ class DMD2Trainer:
                 num_frames=self._config.validation.video_dims[2],
                 frame_rate=self._config.validation.frame_rate,
                 num_inference_steps=self._config.validation.inference_steps,
-                guidance_scale=self._config.validation.guidance_scale,
+                guidance_scale=1.0,
                 seed=self._config.validation.seed + idx,
                 cached_embeddings=self._cached_validation_embeddings[idx] if self._cached_validation_embeddings else None,
-                stg_scale=self._config.validation.stg_scale,
-                stg_blocks=self._config.validation.stg_blocks,
+                fixed_sigmas=DISTILLED_PIPELINE_STAGE1_SIGMAS,
+                stg_scale=0.0,
+                stg_blocks=[],
                 stg_mode=self._config.validation.stg_mode,
                 generate_audio=self._config.validation.generate_audio,
             )
@@ -836,9 +1080,13 @@ class DMD2Trainer:
 
     def _save_checkpoint(self) -> Path | None:
         self._accelerator.wait_for_everyone()
-        student_full_state = self._accelerator.get_state_dict(self._student)
-        fake_full_state = self._accelerator.get_state_dict(self._fake)
-        disc_state = self._accelerator.get_state_dict(self._discriminator)
+        if self._uses_qlora:
+            student_full_state = self._unwrap_model(self._student).state_dict()
+            fake_full_state = self._unwrap_model(self._fake).state_dict()
+        else:
+            student_full_state = self._accelerator.get_state_dict(self._student)
+            fake_full_state = self._accelerator.get_state_dict(self._fake)
+        disc_state = self._unwrap_model(self._discriminator).state_dict()
 
         if not IS_MAIN_PROCESS:
             return None
@@ -847,12 +1095,13 @@ class DMD2Trainer:
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
         student_path = checkpoint_dir / f"student_step_{self._global_step:05d}.safetensors"
+        student_pipeline_path = checkpoint_dir / f"student_step_{self._global_step:05d}_pipeline.safetensors"
         fake_path = checkpoint_dir / f"fake_step_{self._global_step:05d}.safetensors"
         disc_path = checkpoint_dir / f"discriminator_step_{self._global_step:05d}.pt"
 
         if self._config.model.training_mode == "lora":
-            unwrapped_student = self._accelerator.unwrap_model(self._student)
-            unwrapped_fake = self._accelerator.unwrap_model(self._fake)
+            unwrapped_student = self._unwrap_model(self._student)
+            unwrapped_fake = self._unwrap_model(self._fake)
             student_state = get_peft_model_state_dict(unwrapped_student, state_dict=student_full_state)
             fake_state = get_peft_model_state_dict(unwrapped_fake, state_dict=fake_full_state)
         else:
@@ -860,6 +1109,12 @@ class DMD2Trainer:
             fake_state = fake_full_state
 
         save_file({k: v.to(torch.bfloat16) for k, v in student_state.items()}, student_path)
+        if self._config.model.training_mode == "lora":
+            pipeline_state = {
+                (k.removeprefix("base_model.model.") if k.startswith("base_model.model.") else k): v.to(torch.bfloat16)
+                for k, v in student_state.items()
+            }
+            save_file(pipeline_state, student_pipeline_path)
         save_file({k: v.to(torch.bfloat16) for k, v in fake_state.items()}, fake_path)
         torch.save(disc_state, disc_path)
 
@@ -869,6 +1124,16 @@ class DMD2Trainer:
             for path in to_remove:
                 if path.exists():
                     path.unlink()
+                pipeline_path = path.with_name(path.stem + "_pipeline" + path.suffix)
+                if pipeline_path.exists():
+                    pipeline_path.unlink()
+                step_suffix = path.stem.removeprefix("student_step_")
+                for sibling in (
+                    path.with_name(f"fake_step_{step_suffix}.safetensors"),
+                    path.with_name(f"discriminator_step_{step_suffix}.pt"),
+                ):
+                    if sibling.exists():
+                        sibling.unlink()
             self._checkpoint_paths = self._checkpoint_paths[-self._config.checkpoints.keep_last_n :]
 
         return student_path
@@ -891,6 +1156,7 @@ class DMD2Trainer:
         with progress:
             if self._config.validation.interval and not self._config.validation.skip_initial_validation:
                 self._run_validation()
+                self._accelerator.wait_for_everyone()
 
             for step in range(self._config.optimization.steps):
                 step_start_time = time.time()
@@ -924,10 +1190,10 @@ class DMD2Trainer:
                 )
 
                 if generator_step:
-                    rollout_final, _rollout_steps = self._rollout_student(batch)
+                    rollout_final, rollout_steps = self._rollout_student(batch)
                 else:
                     with torch.no_grad():
-                        rollout_final, _rollout_steps = self._rollout_student(batch)
+                        rollout_final, rollout_steps = self._rollout_student(batch)
 
                 self._disc_optimizer.zero_grad(set_to_none=True)
                 disc_loss, disc_metrics = self._compute_discriminator_loss(batch, rollout_final)
@@ -943,11 +1209,17 @@ class DMD2Trainer:
 
                 if generator_step:
                     self._student_optimizer.zero_grad(set_to_none=True)
-                    gen_loss, gen_metrics = self._compute_generator_loss(batch, rollout_final)
-                    self._accelerator.backward(gen_loss)
-                    if self._config.optimization.max_grad_norm > 0:
-                        self._accelerator.clip_grad_norm_(self._student.parameters(), self._config.optimization.max_grad_norm)
-                    self._student_optimizer.step()
+                    self._discriminator.requires_grad_(False)
+                    try:
+                        gen_loss, gen_metrics = self._compute_generator_loss(batch, rollout_final, rollout_steps)
+                        self._accelerator.backward(gen_loss)
+                        if self._config.optimization.max_grad_norm > 0:
+                            self._accelerator.clip_grad_norm_(
+                                self._student.parameters(), self._config.optimization.max_grad_norm
+                            )
+                        self._student_optimizer.step()
+                    finally:
+                        self._discriminator.requires_grad_(True)
                     metrics.update(gen_metrics)
 
                 if IS_MAIN_PROCESS:
@@ -961,6 +1233,7 @@ class DMD2Trainer:
 
                 if self._config.validation.interval and self._global_step % self._config.validation.interval == 0:
                     self._run_validation()
+                    self._accelerator.wait_for_everyone()
 
                 if self._config.checkpoints.interval and self._global_step % self._config.checkpoints.interval == 0:
                     self._save_checkpoint()

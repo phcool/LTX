@@ -49,6 +49,13 @@ class Dmd2OptimizationConfig(ConfigBaseModel):
             "This leaves student/fake FSDP behavior unchanged."
         ),
     )
+    teacher_deepspeed_inference: bool = Field(
+        default=False,
+        description=(
+            "When true, wrap only the frozen DMD2 teacher with DeepSpeed inference instead of FSDP. "
+            "Student/fake training behavior is unchanged."
+        ),
+    )
 
 
 class Dmd2ObjectiveConfig(ConfigBaseModel):
@@ -101,6 +108,14 @@ class Dmd2TrainerConfig(ConfigBaseModel):
             raise ValueError("LoRA configuration must be provided when model.training_mode is 'lora'")
         if self.model.training_mode == "full" and self.acceleration.quantization is not None:
             raise ValueError("Quantization is only supported for DMD2 LoRA training.")
-        if self.optimization.teacher_cpu_offload and self.optimization.teacher_fsdp_cpu_offload:
-            raise ValueError("Use only one teacher offload mode: teacher_cpu_offload or teacher_fsdp_cpu_offload")
+        teacher_modes = [
+            self.optimization.teacher_cpu_offload,
+            self.optimization.teacher_fsdp_cpu_offload,
+            self.optimization.teacher_deepspeed_inference,
+        ]
+        if sum(bool(mode) for mode in teacher_modes) > 1:
+            raise ValueError(
+                "Use only one teacher execution mode: teacher_cpu_offload, "
+                "teacher_fsdp_cpu_offload, or teacher_deepspeed_inference"
+            )
         return self

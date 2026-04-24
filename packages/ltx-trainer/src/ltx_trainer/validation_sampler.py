@@ -90,6 +90,7 @@ class GenerationConfig:
     generate_audio: bool = True  # Whether to generate audio alongside video
     include_reference_in_output: bool = False  # For IC-LoRA: concatenate original reference with generated output
     cached_embeddings: CachedPromptEmbeddings | None = None  # Pre-computed text embeddings (avoids loading Gemma)
+    fixed_sigmas: tuple[float, ...] | None = None  # Optional fixed denoising schedule for distilled validation
     stg_scale: float = 0.0  # STG strength (0.0 = disabled, recommended: 1.0)
     stg_blocks: list[int] | None = None  # Transformer blocks to perturb (None = all, recommended: [29])
     stg_mode: Literal["stg_av", "stg_v"] = "stg_av"  # STG mode: "stg_av" (audio+video) or "stg_v" (video only)
@@ -488,8 +489,11 @@ class ValidationSampler:
         device: torch.device,
     ) -> tuple[LatentState, LatentState | None]:
         """Run the denoising loop using X0 prediction with CFG and optional STG."""
-        scheduler = LTX2Scheduler()
-        sigmas = scheduler.execute(steps=config.num_inference_steps).to(device).float()
+        if config.fixed_sigmas is None:
+            scheduler = LTX2Scheduler()
+            sigmas = scheduler.execute(steps=config.num_inference_steps).to(device).float()
+        else:
+            sigmas = torch.tensor(config.fixed_sigmas, device=device, dtype=torch.float32)
         stepper = EulerDiffusionStep()
         cfg_guider = CFGGuider(config.guidance_scale)
         stg_guider = STGGuider(config.stg_scale)
